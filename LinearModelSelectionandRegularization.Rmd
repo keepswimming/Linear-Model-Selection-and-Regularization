@@ -1,0 +1,497 @@
+---
+title: "Homework 5 R markdown"
+author: "Rita Miller"
+date: '`r Sys.Date()`'
+output:
+  word_document:
+    fig_height: 4
+    fig_width: 4.5
+  html_document:
+    fig_height: 4
+    fig_width: 4.5
+  pdf_document:
+    fig_height: 4
+    fig_width: 4.5
+---
+
+```{r, setup, include=FALSE}
+require(mosaic)   # Load additional packages here 
+
+# Some customization.  You can alter or delete as desired (if you know what you are doing).
+trellis.par.set(theme=theme.mosaic()) # change default color scheme for lattice
+knitr::opts_chunk$set(
+  tidy=FALSE,     # display code as typed
+  size="small")   # slightly smaller font for code
+```
+#### **Intellectual Property:**
+These problems are the intellectual property of the instructors and may not be reproduced outside of this course.
+
+**.Rmd output format**:  The setting in this markdown document is `word_document`; alternatively, you also have options for `html_document` or `pdf_document`.
+
+###############################################
+## Problem 1:  Fitting and Selecting Methods ##
+###############################################
+
+Download the data set *TreesTransformed.csv* (from Homework 2 on Canvas) and read it into R.  Define appropriate x matrix and y vector using the below code:
+
+```{r echo=FALSE}
+trees <- read.csv("TreesTransformed.csv")  
+
+#fit models
+x = model.matrix(Volume~., data=trees)[,-1] #minus the intercept
+
+y = trees$Volume #response
+
+n = dim(x)[1] # n is the # of observations
+
+p = dim(x)[2] #number of predictors
+```
+
+```{r}
+###libraries used###
+library(glmnet)#for methods
+library(boot)#for assumptions-checking/error estimation
+library(dplyr)#for data organization
+library(plotmo)#for visuals
+library(ggplot2)
+library(ISLR)
+```
+
+The general goal for this dataset is to predict *Volume* based on *Girth* and *Height*. We will be fitting the below linear model using multiple linear regression and penalized regression methods:
+$Volume = \beta_0+\beta_1\cdot Girth +\beta_2\cdot Height+\beta_3\cdot Girth\cdot Height+\beta_4 \cdot Girth^2+\beta_5\cdot Girth^2\cdot Height$  
+
+Note that there are five predictors, some of which are transformations of the original two variables *Girth* and *Height*, for predicting the value of the response variable *Volume.*  The transformed variables are included in the *TreesTransformed.csv* file, named *GirthHeight* (for $Girth\cdot Height$), *Girth2* (for $Girth^2$), and *Girth2Height* (for $Girth^2\cdot Height$).  
+
+
+### Question 1 **(4 points)**: 
+
+Fit the above model, using each of the following methods:
+
+   1. Multiple linear regression  
+   2. Ridge Regression ($\alpha$  = 0), with $\lambda$ = 0.01, 0.02, …, 0.99, 1.00.  
+   3. LASSO ($\alpha$ = 1), with $\lambda$ = 0.01, 0.02, …, 0.99, 1.00.  
+   4. Elastic net, with $\alpha$  = 0.7 and $\lambda$ = 0.01, 0.02, …, 0.99, 1.00.
+
+That is, use the values ``lambdalist = c((1:100)/100)`` for fitting with the ``glmnet()`` function.
+
+Include your code below for fitting via these four methods:
+
+**Code Answer**
+
+```{r}
+x = model.matrix(Volume ~., data = trees)[ ,-1]
+y = trees$Volume
+```
+
+```{r}
+#1. fit model = Multiple linear regression 
+#fit response on all predictors, using multiple linear regression
+origfit = lm(Volume ~., data = trees)
+summary(origfit)
+```
+
+```{r}
+#2. Ridge Regression (RR) is a penalized regression model
+#Start by specifying a list of lambda values
+library(glmnet)
+lambdalist = c((1:100)/100)
+RRfit = glmnet(x, y, lambda = lambdalist, alpha = 0) #alpha should = 0
+```
+
+```{r}
+#3. LASSO is another type of penalized regression model
+LASSOfit = glmnet(x, y, lambda = lambdalist, alpha = 1) #slpha should = 1
+```
+
+```{r}
+#4. Elastic net is another type of penalized regression model
+
+ENET70fit = glmnet(x, y, lambda = lambdalist, alpha = 0.7) #alpha should be less than 1
+```
+#OR
+```{r}
+lambdalist = (1:100)/100
+library(glmnet)
+RRfit = glmnet(x, y, alpha = 0,lambda=lambdalist)
+LASSOfit = glmnet(x, y, alpha = 1,lambda=lambdalist)
+ENETfit = glmnet(x, y, alpha = 0.7,lambda=lambdalist)
+```
+
+### Question 2 **(1 point)**: 
+
+Consider the fit of model 1., multiple linear regression. How many of the predictors are marginally significant (after fitting the other predictors)? None of the t statistics are significant, due to high collinearity of the predictors (some are transformations
+of others)
+
+**Multiple choice Answer (AUTOGRADED)**:  one of 
+
+0,  #<-----this one
+1,  
+2,  
+3,  
+4
+
+### Question 3 **(2 points)**:
+
+Provide an explanation for the answer to the previous question.  (In other words, what characteristics of the data set caused the answer to be what it was?)
+
+**Text Answer**:
+#We can see large standard errors relative to the size of the coefficient estimates, because there is collinearity or instability in our estimates. 
+
+***
+
+### Question 4 **(2 points)**:
+
+Which of the following methods could **NOT** have produced the below coefficients? Select all methods that apply.  
+$\hat{\beta}_0$ = −5.90695, $\hat{\beta}_1$ = 0, $\hat{\beta}_2$ = 0, $\hat{\beta}_3$ = 0.01194, $\hat{\beta}_4$ = 0.03991, $\hat{\beta}_5$ = 0.00115</span>  
+#B0 = -5.90695
+#B1 = 0
+#B2 = 0
+#B3 = 0.1194
+#B4 = 0.03991
+#B5 = 0.00115
+
+**Multiple select Answer (AUTOGRADED)**: 
+
+Multiple linear regression, <---
+Ridge Regression, <----
+Elastic net, 
+LASSO 
+
+***
+
+### Obtain the values for the coefficients of the LASSO model fit with $\lambda = 0.1$.
+
+```{r}
+library(glmnet)
+lambdalist = c((1:100)/100)
+LASSOfit = glmnet(x, y, lambda = lambdalist, alpha = 1) #alpha should = 1
+coef(LASSOfit, s = 0.1)
+```
+
+### Question 5 **(1 point)**: 
+
+For the LASSO model fit with $\lambda = 0.1$, enter the value of the estimated intercept $\hat{\beta}_0 =$
+
+(report your answer to *three* decimal places)
+
+**Numeric Answer (AUTOGRADED)**: -1.714
+
+
+### Question 6 **(3 points)**:
+
+For the LASSO model fit with $\lambda = 0.1$, which of the predictor terms have **non-zero** coefficients?  Select *all* that apply.
+
+**Multiple select Answer (AUTOGRADED)**: 
+
+$Girth$, 
+$Height$, <----
+$Girth\cdot Height$, <---
+$Girth^2$, 
+$Girth^2\cdot Height$ <---
+
+
+### Question 7 **(2 points)**: ?
+The following code is used to produce cross-validation measures for the three penalized regression methods:
+
+```{r}
+lambdalist = 1:100/100; ntrees=dim(trees)[1]
+nfolds = 5; groups = rep(1:nfolds,length=ntrees) 
+set.seed(5); cvgroups = sample(groups,ntrees)  
+
+RRcv = cv.glmnet(x, y, alpha = 0,lambda=lambdalist,nfolds=nfolds, foldid=cvgroups)
+LASSOcv = cv.glmnet(x, y, alpha = 1,lambda=lambdalist,nfolds=nfolds, foldid=cvgroups)
+ENETcv = cv.glmnet(x, y, alpha = 0.7,lambda=lambdalist,nfolds=nfolds, foldid=cvgroups)
+
+```
+
+The image shows a plot of the $CV_{(5)}$ values for Ridge Regression, LASSO, and Elastic net models, plotted against the value of $\lambda$.  The $CV_{(5)}$ value for multiple linear regression is a constant, $CV_{(5)}$ = 9.59, since no penalty is applied.
+
+Which model is optimal?
+
+
+```{r, echo=F, fig.height=3, fig.width=6}
+nL = length(lambdalist)
+CVresults = data.frame(alllambda = c(RRcv$lambda, LASSOcv$lambda, ENETcv$lambda),
+                       CVvalues = c(RRcv$cvm, LASSOcv$cvm, ENETcv$cvm),
+                       allmethods =  c(rep("RR",nL),rep("LASSO",nL),rep("ENET",nL)) )
+CVresults %>%  #error
+  group_by(allmethods) %>%
+  gf_point(CVvalues ~ alllambda,color = ~ allmethods,size=2,shape = ~ allmethods) %>%
+  gf_labs(title = paste("CV measures for Penalized Fits"),
+          y = "CV_(5)", x = "lambda")
+```
+
+**Multiple choice Answer (AUTOGRADED)**:  one of
+Multiple linear regression,  
+Ridge Regression,  
+LASSO,  <----since we want to minimize CV(5)
+Elastic net
+
+
+### Question 8 **(2 points)**:
+
+The model you chose in the previous question is optimal with $\lambda$ = 
+
+(a range of answers is acceptable, so you may visually estimate the value - respond to *two* decimal places)
+
+**Numeric Answer (AUTOGRADED)**:0.11
+
+#####################################################
+## Problem 2:  Motivation for Penalized Regression ##
+#####################################################
+
+For the **College** data set from the **ISLR** package, we will work to predict *log.Enroll*, the natural log transformation of *Enroll*, the number of new students enrolled (per year) as a function of the other variables.  You may use the ``help(College)`` command to learn more about the dataset. </span>
+
+```{r}
+data(College)
+#head(College)
+#summary(College)
+```
+
+### Question 9 **(2 points)**:ok
+
+Each of the five variables *Enroll, Apps, Accept, F.Undergrad*, and *P.Undergrad* is related to the size of the college and has strongly right-skewed distribution.  Explain why the skewness makes sense, in terms of the variety of colleges covered in this dataset. 
+
+**Text Answer**:
+ The data shows approximately 73% of colleges are private. This may explain a lower number of students and enrollments, since private schools are generally more expensive than public schools. When using a histogram to explain this situation, private schools would gather towards the left and skewed right to include other schools, like public schools.  
+
+***
+
+### Question 10 **(3 points)**: wrong
+
+To make linear relationships more reasonable, log transformation of these five variables work well. Define the new variables *log.Enroll, log.Apps, log.Accept, log.F.Undergrad*, and *log.P.Undergrad* as the (natural) log transformation of the corresponding variables.  Resave the **College** data  in a new data frame called **CollegeT**, in which you:
+
+   * Add these new variables to the data frame; 
+   * Remove the original-scale variables from the data frame; and
+   * Make the variable *Private* into a factor.   
+
+Include your code below:
+
+**Code Answer**:
+
+```{r}
+library(ISLR)
+CollegeT <- College %>%
+ mutate(log.Apps = log(Apps), log.Accept = log(Accept), log.F.Undergrad =
+log(F.Undergrad),
+ log.P.Undergrad = log(P.Undergrad), log.Enroll = log(Enroll)) %>%
+ mutate(Private = factor(Private)) %>%
+ select(-Apps, -Accept, -F.Undergrad, -P.Undergrad, -Enroll)
+```
+
+### Question 11 **(2 points)**: Must fix 10 first
+
+Make an appropriate plot for describing the distribution of the response *log.Enroll*:
+
+   * Use the "Embed Image" button to **embed** the plot; and
+   * **Describe** the distribution of the (transformed) response *log.Enroll.*
+
+**Plot + Text Answers**: Fix
+
+```{r}
+hist(CollegeT$log.Enroll, main = "Distribution of College Enrollments", xlab = "Number of enrollments(log scale")
+png("Wk5_Ques11_histogram", width = 3, height = 4, units = "in", pointsize = 12, res = 300)
+plot(1:10, rnorm(10,0,5))
+dev.off()
+```
+#OR
+```{r}
+gf_density( ~ log.Enroll, fill = "blue", data = CollegeT) %>%
+ gf_labs(title = paste("Distribution of log.Enroll"), y = "density", x =
+"log.Enroll")
+
+```
+#The distribution appears to be not too far from symmetric (much less skewed than original scale).
+
+
+### Question 12 **(1 point)**:
+
+Which of the following predictors is most highly correlated with the response *log.Enroll*?
+
+```{r}
+#this code will find maximum absolute vlaue of correlation
+WhichNum = (1:(dim(CollegeT)[2]))[as.numeric(lapply(CollegeT, is.factor)) == 0]
+schoolNum = CollegeT %>%
+  select(WhichNum)
+library(GGally)
+ggpairs(schoolNum, upper = list(continuous = wrap("cor", size = 2)))
+```
+
+**Multiple choice Answer (AUTOGRADED on D2L)**:  one of  
+Expend,  
+log.Accept,  <----
+log.P.Undergrad,  
+perc.alumni,  
+Personal
+
+### Question 13 **(2 points)**: 
+
+Provide a reason that the predictor you chose in the previous question makes sense, based on the description of the data.
+
+**Text Answer**: 
+Enrollment and acceptance are interconnected, since one must first be accepted into college before enrollment can occur. Alternately, some students may be accepted into college, but choose to accept an offer from another college, and therefore never enrolling in that college. 
+
+### Question 14 **(2 points)**:
+
+Describe features of this data set that support using a penalized regression model (versus a basic multiple linear regression model). 
+
+**Text Answer**: 
+When looking at a larger correlation matrix, there are many variables within this dataset which are strongly correlated with each other. This can introduce the problem of collinearity and a penalized regression model may be used to either penalize and shrink some of the terms or remove them altogether.
+ 
+##################################
+## Problem 3:  Applying Methods ## 
+##################################
+
+Using the data **College** data set from the **ISLR** package, with the new variables as defined in Problem 2, fit the response *log.Enroll* on the remaining variables:  *Private, Top10perc, Top25perc, Outstate, Room.Board, Books, Personal, PhD, Terminal, S.F.Ratio, perc.alumni, Expend, Grad.Rate, log.Apps, log.Accept, log.F.Undergrad, log.P.Undergrad*. 
+
+*** 
+
+For the following questions 15-16, fit the LASSO ($\alpha$ = 1) for possible values $\lambda$ = 0.001, 0.002, ..., 0.999, 1.000.
+
+```{r}
+#need to use CollegeT? since log is on that?
+x = model.matrix(log.Enroll ~., data = CollegeT)[,-1]
+y = CollegeT$log.Enroll
+
+```
+
+```{r}
+library(glmnet)
+lambdalist = c((1:100)/100)
+LASSOfit = glmnet(x, y, lambda = lambdalist, alpha = 1)
+```
+
+### Question 15 **(4 points)**:
+
+Identify how many predictor coefficients are non-zero, for each of the following $\lambda$ values.  
+
+Note:  this does **not** count the intercept.
+
+   * For the LASSO model with  $\lambda$ = 0.02, there are ______ **non-zero** predictor coefficients.
+   * For the LASSO model with $\lambda$ = 0.03, there are ______ **non-zero** predictor coefficients.
+   * For the LASSO model with  $\lambda$ = 0.05, there are ______ **non-zero** predictor coefficients.
+   * For the LASSO model with  $\lambda$ = 0.50, there are ______ **non-zero** predictor coefficients.
+
+**Multiple dropdown Answer (AUTOGRADED)**:  
+
+```{r}
+coef(LASSOfit, s=0.02) #4
+#coef(LASSOfit, s=0.03) #3
+#coef(LASSOfit, s=0.05) #2
+#coef(LASSOfit, s=0.50) #2
+```
+
+### Question 16 **(2 points)**:
+
+Which **two** variables appear to be the most useful for predicting *log.Enroll* with the LASSO model? Select both.
+
+**Multiple select Answer**:  select two of  
+Private,  
+Top10perc,  
+Top25perc,  
+Outstate,  
+Room.Board,  
+Books,  
+Personal,  
+PhD,  
+Terminal,  
+S.F.Ratio,  
+perc.alumni,  
+Expend,  
+Grad.Rate,  
+log.Apps,  
+log.Accept,  <---
+log.F.Undergrad, <--- 
+log.P.Undergrad
+
+### **Elastic Net model**
+
+For the following questions 17-19, fit the Elastic net model, with $\alpha$ = 0.75 and possible values $\lambda$  = 0.001, 0.002, ..., 0.999, 1.000.
+
+
+### Question 17 **(2 points)**:
+
+Using ``set.seed(5)``, make groups for 10-fold cross-validation; use the below code: 
+```{r}
+ncollege = dim(CollegeT)[1]; nfolds = 10
+groups = rep(1:nfolds, length = ncollege)
+set.seed(5)
+cvgroups = sample(groups, ncollege)
+```
+Use the ``cv.glmnet`` command along with these cross-validation groups to perform cross-validation; note that $CV_{(10)}$ and $\lambda$ values are contained, respectively, in the ``cvm`` and ``lambda`` values of the output. 
+
+For the Elastic net model with $\alpha$ = 0.75, make a plot of $CV_{(10)}$ vs $\lambda$.  Use the "Embed Image" button  to submit your plot on Canvas
+
+**Plot Answer**: 
+
+```{r}
+library(glmnet)
+
+lambdalist = 1:100/100; ntrees=dim(trees)[1]
+
+#apply cross validation to Elastic net model fit
+ENETcv = cv.glmnet(x, y, lambda=lambdalist, alpha = 0.75, nfolds = ncollege, foldid = cvgroups)
+
+#examine cross-validation results
+plot(ENETcv)#vertical lines at lambda.min and lambda.1se
+ENETcv$lambda.min; log(ENETcv$lambda.min)#min lambda
+ENETcv$lambda.1se; log(ENETcv$lambda.1se) #within 1se
+min(ENETcv$cvm)#min cv values, from $cvm
+plot(ENETcv, ylim=c(15,25))#vertical lines at lambda.min and lambda.1se
+
+#store best lambda and cv values
+allalpha = c(0,1,0.95,0.5)
+
+bestlambda= ENETcv$lambda.min
+
+
+minCVbestlambda = min(ENETcv$cvm)
+
+
+#plot(lambdalist, ENETcv$cvm, main = "10-fold Cross-Validation vs Lambda", xlab = "Lambda", ylab = "CV Error")
+
+```
+
+```{r}
+# make groups for 10-fold cross-validation
+
+# problem 17
+
+# problem 18
+
+# include all code for problem 19
+```
+
+
+### Question 18 **(2 points)**:
+
+For the Elastic net model with $\alpha$ = 0.75, what is the value of $\lambda$ that minimizes $CV_{(10)}$?
+
+(provide an exact answer, out to *three* decimal places)
+
+**Numeric Answer (AUTOGRADED)**: 0.035
+
+
+### Question 19 **(3 points)**:
+
+Enter your R code below for computing the $CV_{(10)}$ measure for the Elastic net model with $\alpha$  = 0.75 and for selecting the optimal $\lambda$.
+
+**Code Answer**:  (see above)b
+
+```{r}
+library(glmnet)
+lambdalist = 1:100/100; ntrees=dim(trees)[1]
+#apply cross validation to Elastic net model fit
+ENETcv = cv.glmnet(x, y, lambda=lambdalist, alpha = 0.75, nfolds = ncollege, foldid = cvgroups)
+#examine cross-validation results
+plot(ENETcv)#vertical lines at lambda.min and lambda.1se
+ENETcv$lambda.min; log(ENETcv$lambda.min)#min lambda
+ENETcv$lambda.1se; log(ENETcv$lambda.1se) #within 1se
+min(ENETcv$cvm)#min cv values, from $cvm
+plot(ENETcv, ylim=c(15,25))#vertical lines at lambda.min and lambda.1se
+
+#store best lambda and cv values
+bestlambda[1]= ENETcv$lambda.min
+minCVbestlambda[1] = min(ENETcv$cvm)
+```
+
